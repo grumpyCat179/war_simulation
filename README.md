@@ -1,167 +1,145 @@
-WarSim Pro – Production‑Grade 2‑D Multi‑Agent Battle Simulator
+WarSim Pro ⚔️
 
+Production-Grade 2-D Multi-Agent Battle Simulator
 Branch: main
 
 Overview
 
-WarSim Pro is a research‑grade rewrite of a 2‑D multi‑agent combat simulator. It emphasises determinism, modularity and high performance. The simulator cleanly separates the pipeline into perception → ego‑frame → policy → mask → sampling → engine → grid and imposes explicit ABI contracts for actions, directions, observations and masks. Hot paths are vectorised and GPU‑friendly so thousands of agents can run at ≥60 ticks per second on a 128×128 grid
-raw.githubusercontent.com
-.
+WarSim Pro is a research-grade rewrite of a 2-D multi-agent combat simulator, built with a focus on determinism, modularity, and high performance.
 
-Design Tenets
+The pipeline is cleanly decomposed into:
+perception → ego-frame → policy → mask → sampling → engine → grid
 
-Contracts over code: All directional and action layouts are defined by rigid schemas, making rotation and masking easy to reason about
-raw.githubusercontent.com
-.
+Explicit ABI contracts define actions, directions, observations, and masks. Performance-critical paths are vectorised and GPU-friendly, enabling thousands of agents to run at ≥60 ticks/second on a 128×128 grid 🚀.
 
-Strict modularity: Each layer is independently swappable; tests pin invariants at the seams
-raw.githubusercontent.com
-.
+Design Tenets 🧩
 
-Performance discipline: Struct‑of‑Arrays (SoA) tensors and batched inference minimise Python overheads
-raw.githubusercontent.com
-.
+Contracts over code – All directional/action layouts follow rigid schemas, simplifying rotation and masking.
 
-Observability & testability: Built‑in stats, logs and property tests catch regressions quickly
-raw.githubusercontent.com
-.
+Strict modularity – Each layer is independently swappable; seam tests pin down invariants.
 
-Determinism knobs: Global seeds and fixed initialisation ensure reproducibility
-raw.githubusercontent.com
-.
+Performance discipline – Struct-of-Arrays (SoA) tensors and batched inference minimise Python overhead.
 
-System Architecture
+Observability & testability – Built-in stats, logs, and property tests catch regressions early.
 
-At a high level the runtime consists of a tick engine that updates health, movement, collisions and scoring; an agents registry that stores SoA data and brains; an ego‑frame runtime that rotates observations into an ego‑centric frame and unrotates logits; a bucketer that groups agents by brain topology; a mask builder that enforces legal actions; and a sampler that produces actions. These components interact as shown in the architecture diagram
-raw.githubusercontent.com
-.
+Determinism knobs – Seeds and fixed initialisation guarantee reproducibility.
+
+System Architecture 📊
+
+The runtime consists of:
+
+Tick Engine – Updates health, movement, collisions, and scoring.
+
+Agents Registry – Manages SoA data and brain assignments.
+
+Ego-Frame Runtime – Rotates observations into an ego-centric frame, then unrotates logits.
+
+Bucketer – Groups agents by brain topology for efficient batched inference.
+
+Mask Builder – Enforces legal action constraints.
+
+Sampler – Draws final actions from masked logits.
+
+All components interlock under a deterministic, test-driven runtime.
 
 Repository Layout
+war_simulation/
+├── agent/       # Agent brains (actor-critic, encoders)
+├── engine/      # Core engine: ticks, grid, raycasting, mapgen
+├── rl/          # PPO and other RL algorithms
+├── scripts/     # Training & launch scripts
+├── tests/       # Unit & property tests pinning ABI contracts
+├── config.py    # Centralised knobs & hyper-parameters
 
-The codebase is organised under final_war_sim/ (or war_simulation/ on this branch) with the following key modules
-raw.githubusercontent.com
-:
-
-Directory/File	Description
-agent/	Contains the per‑agent brain implementation (brain.py) and the supporting encoders (e.g. RayEncoder)
-raw.githubusercontent.com
-.
-engine/	Core simulation engine: tick logic, grid representation, raycasting and map generation
-raw.githubusercontent.com
-.
-config.py	Centralised configuration; all knobs for grid size, action space, unit stats, raycasting and respawn settings live here
-raw.githubusercontent.com
-.
-rl/ and scripts/	Reinforcement‑learning algorithms (e.g. PPO) and training/launch scripts.
-tests/	Unit and property tests that pin ABI contracts and invariants
-raw.githubusercontent.com
-.
 Installation & Quick Start
+Prerequisites
 
-Prerequisites: Windows 11, Python 3.10, CUDA 12.x, a GPU such as an RTX 3060 and PyTorch ≥ 2.1
-raw.githubusercontent.com
-.
+Windows 11
 
-Clone and install dependencies
+Python 3.10
 
+CUDA 12.x
+
+PyTorch ≥ 2.1
+
+GPU: RTX 3060 (6 GB VRAM recommended)
+
+Setup
 git clone https://github.com/grumpyCat179/war_simulation.git
 cd war_simulation
 python -m venv .venv && source .venv/bin/activate  # optional
 pip install -r requirements.txt
 pip install -e .
 
-
-Run a headless simulation
-
+Run a Headless Simulation
 python -m war_simulation.main --ticks 2000 --grid 128 128 --agents 1000
 
 
-The program will run without a UI, logging per‑tick stats to the console or a results file.
+Per-tick stats are logged to console or file.
 
 Configuration
 
-All hyper‑parameters and runtime knobs live in config.py. Examples include:
+All runtime knobs live in config.py (or via FWS_* environment variables).
+Key options include:
 
-GRID_WIDTH/GRID_HEIGHT (default 128) – world dimensions
-raw.githubusercontent.com
-.
+GRID_WIDTH, GRID_HEIGHT – world size (default 128×128)
 
-NUM_ACTIONS – 17 for melee‐only or 41 for ranged actions
-raw.githubusercontent.com
-.
+NUM_ACTIONS – 17 (melee) or 41 (ranged)
 
-RAY_PE_DIM and RAY_ATTN_DIM – control positional encoding and tiny attention in the ray encoder
-raw.githubusercontent.com
-.
+RAY_PE_DIM, RAY_ATTN_DIM – ray encoder capacity
 
-MAX_AGENTS – maximum number of agents to allocate in the registry
-raw.githubusercontent.com
-.
+MAX_AGENTS – maximum allocated agents
 
-RESPAWN_COOLDOWN_TICKS, RESPAWN_BATCH_PER_TEAM etc. – tune respawn frequency and diversity
-raw.githubusercontent.com
-.
+RESPAWN_COOLDOWN_TICKS, RESPAWN_BATCH_PER_TEAM – respawn controls
 
-Change these constants or set environment variables (FWS_…) before importing modules. Do not modify config dynamically inside hot loops
-raw.githubusercontent.com
-.
+⚠️ Avoid modifying config dynamically inside hot loops.
 
 Agent Brain
 
-The default per‑agent brain is a tiny actor‑critic network with:
+Default per-agent brain = tiny actor-critic:
 
-A RayEncoder that maps the first 64‑dimensional ray features into a 32‑dimensional context via linear projection, optional ring positional encoding and a light 1‑head self‑attention
-raw.githubusercontent.com
-.
+RayEncoder – projects 64 ray features into 32-D context, with optional ring positional encoding and light self-attention.
 
-A small MLP trunk with three SiLU layers and two output heads: an actor head producing logits over actions and a critic head estimating the value
-raw.githubusercontent.com
-.
+MLP Trunk – three SiLU layers.
 
-Factorised directional heads keep the action space organised into 8‑wide groups for moves, melee and ranged attacks
-raw.githubusercontent.com
-.
+Output Heads – actor (logits over actions) + critic (value).
 
-This design prioritises throughput while still capturing directional context
-raw.githubusercontent.com
-.
+Directional Factorisation – actions grouped into 8-wide move/melee/ranged heads for clarity.
 
-Tick Loop & Bucketing
+This balances throughput with directional context capture.
 
-During each tick, the engine performs the following high‑level steps
-raw.githubusercontent.com
-:
+Tick Loop
 
-Observation: raycast the environment around each alive agent and collect rich self/environment features.
+Each tick performs:
 
-Ego rotation: rotate the ray block so index 0 aligns with the agent’s heading
-raw.githubusercontent.com
-.
+Observation – raycast & gather environment features.
 
-Bucketing: group agents by identical brain topology to enable batched inference
-raw.githubusercontent.com
-.
+Ego Rotation – align rays with agent heading.
 
-Policy forward: run the actor‑critic brain(s) per bucket and unrotate logits back to global coordinates
-raw.githubusercontent.com
-.
+Bucketing – group by brain topology.
 
-Mask & sampling: apply legal action masks (idle, move, melee, ranged)
-raw.githubusercontent.com
-, then sample actions and step the engine.
+Policy Forward – actor-critic inference, logits unrotated.
 
-Mutation (optional): mutate brains gently by adding noise, widening or pruning parameters
-raw.githubusercontent.com
-.
+Mask & Sampling – legal mask applied, actions sampled.
+
+Engine Update – apply movement, combat, scoring.
+
+(Optional) Mutation – inject small parameter noise or structural variation.
 
 Performance & Testing
 
-Refer to the performance playbook for optimisation tips such as disabling attention (RAY_ATTN_DIM=0) and keeping batch sizes ≥64
-raw.githubusercontent.com
-. Unit and property tests are provided under tests/ and can be run with pytest -q
-raw.githubusercontent.com
-.
+Optimisation tips in the Performance Playbook (e.g. set RAY_ATTN_DIM=0 to disable attention).
 
-Branch‑Specific Notes
+Batch sizes ≥64 recommended.
 
-The main branch represents the baseline WarSim Pro implementation. It prioritises clarity, modularity and performance. Other branches may introduce experimental features or trained brains; see their READMEs for details.
+Tests under tests/ enforce invariants:
+
+pytest -q
+
+Branch Notes
+
+This main branch is the baseline WarSim Pro:
+
+Emphasises clarity, modularity, and performance.
+
+Other branches may contain experimental features or trained policies; see their respective READMEs.
